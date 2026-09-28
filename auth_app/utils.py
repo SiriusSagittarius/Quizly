@@ -1,4 +1,5 @@
 from django.conf import settings
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -34,3 +35,10 @@ def set_auth_cookies(response, user):
         response, REFRESH_COOKIE_NAME, str(refresh_token),
         api_settings.REFRESH_TOKEN_LIFETIME,
     )
+
+
+def create_access_token(raw_refresh_token):
+    """Return a new access token for a valid refresh token."""
+    if not raw_refresh_token:
+        raise TokenError('Refresh-Token fehlt.')
+    return str(RefreshToken(raw_refresh_token).access_token)
