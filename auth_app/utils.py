@@ -3,6 +3,8 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from auth_app.tokens import BlacklistableAccessToken
+
 ACCESS_COOKIE_NAME = 'access_token'
 REFRESH_COOKIE_NAME = 'refresh_token'
 
@@ -57,3 +59,16 @@ def blacklist_refresh_token(raw_refresh_token):
     if not raw_refresh_token:
         raise TokenError('Refresh-Token fehlt.')
     RefreshToken(raw_refresh_token).blacklist()
+
+
+def blacklist_access_token(raw_access_token):
+    """Put the access token on the blacklist while it is still valid.
+
+    Expired or broken access tokens are unusable anyway and are skipped.
+    """
+    if not raw_access_token:
+        return
+    try:
+        BlacklistableAccessToken(raw_access_token).blacklist()
+    except TokenError:
+        return
