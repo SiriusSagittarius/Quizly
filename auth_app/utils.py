@@ -37,8 +37,23 @@ def set_auth_cookies(response, user):
     )
 
 
+def delete_auth_cookies(response):
+    """Remove both token cookies from the browser."""
+    for cookie_name in (ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME):
+        response.delete_cookie(
+            cookie_name, samesite=settings.JWT_COOKIE_SAMESITE
+        )
+
+
 def create_access_token(raw_refresh_token):
-    """Return a new access token for a valid refresh token."""
+    """Return a new access token for a valid, not blacklisted refresh token."""
     if not raw_refresh_token:
         raise TokenError('Refresh-Token fehlt.')
     return str(RefreshToken(raw_refresh_token).access_token)
+
+
+def blacklist_refresh_token(raw_refresh_token):
+    """Put the refresh token on the blacklist or raise TokenError."""
+    if not raw_refresh_token:
+        raise TokenError('Refresh-Token fehlt.')
+    RefreshToken(raw_refresh_token).blacklist()

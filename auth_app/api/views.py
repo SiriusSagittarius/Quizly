@@ -11,12 +11,19 @@ from auth_app.api.serializers import (
 )
 from auth_app.utils import (
     REFRESH_COOKIE_NAME,
+    blacklist_refresh_token,
     create_access_token,
+    delete_auth_cookies,
     set_access_cookie,
     set_auth_cookies,
 )
 
 LOGIN_FAILED = {'detail': 'Ungültige Anmeldedaten.'}
+
+LOGOUT_MESSAGE = (
+    'Abmeldung erfolgreich! Alle Tokens werden gelöscht. '
+    'Das Aktualisierungstoken ist jetzt ungültig.'
+)
 
 
 class RegistrationView(APIView):
@@ -57,6 +64,30 @@ class LoginView(APIView):
             {'detail': 'Erfolgreich angemeldet!', 'user': user_data}
         )
         set_auth_cookies(response, user)
+        return response
+
+
+class LogoutView(APIView):
+    """Log the user out and make the refresh token unusable.
+
+    The user is identified by the refresh cookie, so logging out still
+    works when the short-lived access token has already expired.
+    """
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        """Blacklist the refresh token and delete the auth cookies."""
+        try:
+            blacklist_refresh_token(request.COOKIES.get(REFRESH_COOKIE_NAME))
+        except TokenError:
+            return Response(
+                {'detail': 'Nicht authentifiziert.'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+        response = Response({'detail': LOGOUT_MESSAGE})
+        delete_auth_cookies(response)
         return response
 
 
