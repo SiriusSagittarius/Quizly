@@ -130,10 +130,11 @@ JWT_COOKIE_SECURE = os.getenv('JWT_COOKIE_SECURE', 'False') == 'True'
 
 JWT_COOKIE_SAMESITE = 'Lax'
 
-GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
 WHISPER_MODEL = os.getenv('WHISPER_MODEL', 'base')
 
-AI_MODELS = os.getenv(
-    'AI_MODELS', 'openai/gpt-oss-120b,openai/gpt-oss-20b'
+GEMINI_MODELS = os.getenv(
+    'GEMINI_MODELS',
+    'gemini-3.6-flash,gemini-3.8-flash,gemini-3.7-flash,gemini-3.5-flash',
 ).split(',')

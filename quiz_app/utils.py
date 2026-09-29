@@ -8,11 +8,14 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-import groq
+import httpx
 import whisper
 import yt_dlp
 from django.conf import settings
 from django.db import transaction
+from google import genai
+from google.genai import errors as genai_errors
+from google.genai import types
 
 from quiz_app.api.exceptions import (
     NoSpeechError,
@@ -26,10 +29,8 @@ logger = logging.getLogger(__name__)
 
 QUESTION_COUNT = 10
 DOWNLOAD_ATTEMPTS = 2
-MAX_TRANSCRIPT_CHARS = 16_000
-MAX_ANSWER_TOKENS = 3_000
-AI_TIMEOUT_SECONDS = 120
-AI_ERRORS = (groq.APIError, ValueError, TypeError)
+MAX_TRANSCRIPT_CHARS = 100_000
+GEMINI_ERRORS = (genai_errors.APIError, httpx.HTTPError, ValueError, TypeError)
 VIDEO_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{11}$')
 SHORT_LINK_HOSTS = {'youtu.be', 'www.youtu.be'}
 YOUTUBE_HOSTS = {
@@ -56,41 +57,50 @@ Rules:
 """
 
 QUESTION_SCHEMA = {
-    'type': 'object',
+    'type': 'OBJECT',
     'properties': {
-        'question_title': {'type': 'string'},
+        'question_title': {'type': 'STRING'},
         'question_options': {
-            'type': 'array',
-            'items': {'type': 'string'},
-            'minItems': 4,
-            'maxItems': 4,
+            'type': 'ARRAY',
+            'items': {'type': 'STRING'},
+            'min_items': 4,
+            'max_items': 4,
         },
-        'answer': {'type': 'string'},
+        'answer': {'type': 'STRING'},
     },
     'required': ['question_title', 'question_options', 'answer'],
-    'additionalProperties': False,
 }
 
 QUIZ_SCHEMA = {
-    'type': 'object',
+    'type': 'OBJECT',
     'properties': {
-        'title': {'type': 'string'},
-        'description': {'type': 'string'},
+        'title': {'type': 'STRING'},
+        'description': {'type': 'STRING'},
         'questions': {
-            'type': 'array',
+            'type': 'ARRAY',
             'items': QUESTION_SCHEMA,
-            'minItems': QUESTION_COUNT,
-            'maxItems': QUESTION_COUNT,
+            'min_items': QUESTION_COUNT,
+            'max_items': QUESTION_COUNT,
         },
     },
     'required': ['title', 'description', 'questions'],
-    'additionalProperties': False,
 }
 
-QUIZ_RESPONSE_FORMAT = {
-    'type': 'json_schema',
-    'json_schema': {'name': 'quiz', 'strict': True, 'schema': QUIZ_SCHEMA},
-}
+GEMINI_QUIZ_CONFIG = types.GenerateContentConfig(
+    system_instruction=QUIZ_INSTRUCTIONS,
+    response_mime_type='application/json',
+    response_schema=QUIZ_SCHEMA,
+    automatic_function_calling=types.AutomaticFunctionCallingConfig(
+        disable=True
+    ),
+)
+
+GEMINI_HTTP_OPTIONS = types.HttpOptions(
+    timeout=60_000,
+    retry_options=types.HttpRetryOptions(
+        attempts=2, http_status_codes=[500, 502, 503, 504]
+    ),
+)
 
 
 def normalize_youtube_url(url):
@@ -169,11 +179,6 @@ def transcribe_video(video_url):
         return transcribe_audio(audio_path)
 
 
-def create_ai_client():
-    """Create a Groq client that retries on rate limits and overload."""
-    return groq.Groq(api_key=settings.GROQ_API_KEY, timeout=AI_TIMEOUT_SECONDS)
-
-
 @lru_cache(maxsize=1)
 def load_whisper_model():
     """Load the configured Whisper model once and keep it in memory."""
@@ -197,10 +202,10 @@ def transcribe_audio(audio_path):
 
 
 def prepare_transcript(transcript):
-    """Reject videos without speech and shorten long transcripts.
+    """Reject videos without speech and shorten very long transcripts.
 
-    The Groq free tier allows 8,000 tokens per minute, so the transcript
-    is cut after about 16,000 characters (roughly 15 minutes of speech).
+    The transcript is cut after 100,000 characters (about 1.5 hours of
+    speech) to keep the prompt within the free Gemini limits.
     """
     words = transcript.split()
     if not words:
@@ -208,41 +213,44 @@ def prepare_transcript(transcript):
     return ' '.join(words)[:MAX_TRANSCRIPT_CHARS]
 
 
-def request_quiz_from_ai(model_name, transcript):
-    """Send the transcript to a Groq model and demand a JSON quiz."""
-    with create_ai_client() as client:
-        return client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {'role': 'system', 'content': QUIZ_INSTRUCTIONS},
-                {'role': 'user', 'content': transcript},
-            ],
-            response_format=QUIZ_RESPONSE_FORMAT,
-            reasoning_effort='low',
-            max_completion_tokens=MAX_ANSWER_TOKENS,
+def create_gemini_client():
+    """Create a Gemini client with a timeout and retries on overload.
+
+    An exhausted quota (429) is not retried, the next model is used.
+    """
+    return genai.Client(
+        api_key=settings.GEMINI_API_KEY, http_options=GEMINI_HTTP_OPTIONS
+    )
+
+
+def request_quiz_from_gemini(model_name, transcript):
+    """Send the transcript to a Gemini Flash model and demand a JSON quiz."""
+    with create_gemini_client() as client:
+        return client.models.generate_content(
+            model=model_name, contents=transcript, config=GEMINI_QUIZ_CONFIG
         )
 
 
 def request_valid_quiz(model_name, transcript):
     """Return the quiz of one model or raise if it is missing or invalid."""
-    completion = request_quiz_from_ai(model_name, transcript)
-    quiz_data = json.loads(completion.choices[0].message.content)
+    response = request_quiz_from_gemini(model_name, transcript)
+    quiz_data = json.loads(response.text)
     validate_quiz_data(quiz_data)
     return quiz_data
 
 
 def generate_quiz_data(transcript):
-    """Ask the configured AI models in order until one returns a quiz.
+    """Ask the configured Gemini models in order until one returns a quiz.
 
-    A model that is unavailable, out of quota or answers with an invalid
+    A model that is overloaded, out of quota or answers with an invalid
     quiz is skipped.
     """
     last_error = None
-    for model_name in settings.AI_MODELS:
+    for model_name in settings.GEMINI_MODELS:
         try:
             return request_valid_quiz(model_name, transcript)
-        except (*AI_ERRORS, QuizGenerationError) as error:
-            logger.warning('AI model %s failed: %s', model_name, error)
+        except (*GEMINI_ERRORS, QuizGenerationError) as error:
+            logger.warning('Gemini model %s failed: %s', model_name, error)
             last_error = error
     raise QuizGenerationError() from last_error
 
