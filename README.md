@@ -125,7 +125,8 @@ with `404`.
 - **No speech:** videos without any spoken words are rejected with `400`.
 - **Gemini free tier:** each model allows only about 20 requests per day
   and can be overloaded at peak times. The backend therefore tries the
-  models from `GEMINI_MODELS` one after another. If all of them fail, the
+  models from `GEMINI_MODELS` one after another, ending with the lighter
+  Flash-Lite models, which are rarely overloaded. If all of them fail, the
   API answers with `500` and an error message.
 - **Long videos:** transcripts are cut after 100,000 characters (about
   1.5 hours of speech).
