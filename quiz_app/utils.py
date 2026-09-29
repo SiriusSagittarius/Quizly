@@ -1,6 +1,15 @@
+import logging
 import re
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import yt_dlp
+
+from quiz_app.api.exceptions import VideoUnavailableError
+
+logger = logging.getLogger(__name__)
+
+DOWNLOAD_ATTEMPTS = 2
 VIDEO_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{11}$')
 SHORT_LINK_HOSTS = {'youtu.be', 'www.youtu.be'}
 YOUTUBE_HOSTS = {
@@ -43,3 +52,36 @@ def find_video_id_candidate(parsed_url):
     if len(path_parts) >= 2 and path_parts[0] in PATH_ID_PREFIXES:
         return path_parts[1]
     return None
+
+
+def build_download_options(target_dir):
+    """Return yt-dlp options that keep only the audio track as mp3."""
+    return {
+        'format': 'bestaudio/best',
+        'outtmpl': str(Path(target_dir) / '%(id)s.%(ext)s'),
+        'noplaylist': True,
+        'quiet': True,
+        'noprogress': True,
+        'postprocessors': [
+            {'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'},
+        ],
+    }
+
+
+def run_download(video_url, target_dir):
+    """Download the audio with yt-dlp and convert it to mp3 via FFmpeg."""
+    with yt_dlp.YoutubeDL(build_download_options(target_dir)) as loader:
+        video_info = loader.extract_info(video_url, download=True)
+    return Path(target_dir) / f"{video_info['id']}.mp3"
+
+
+def download_audio(video_url, target_dir):
+    """Download the audio, retrying because YouTube blocks sporadically."""
+    last_error = None
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            return run_download(video_url, target_dir)
+        except yt_dlp.utils.DownloadError as error:
+            logger.warning('Download attempt %s failed: %s', attempt, error)
+            last_error = error
+    raise VideoUnavailableError() from last_error

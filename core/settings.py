@@ -111,6 +111,13 @@ SIMPLE_JWT = {
     'AUTH_TOKEN_CLASSES': ('auth_app.tokens.BlacklistableAccessToken',),
 }
 
-JWT_COOKIE_SECURE = os.getenv('JWT_COOKIE_SECURE', 'False') == 'True'
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {'console': {'class': 'logging.StreamHandler'}},
+    'loggers': {'quiz_app': {'handlers': ['console'], 'level': 'INFO'}},
+}
+
+JWT_COOKIE_SECURE =os.getenv('JWT_COOKIE_SECURE', 'False') == 'True'
 
 JWT_COOKIE_SAMESITE = 'Lax'
