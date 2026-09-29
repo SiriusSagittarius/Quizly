@@ -12,13 +12,20 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Question',
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('id', models.BigAutoField(
+                    auto_created=True, primary_key=True,
+                    serialize=False, verbose_name='ID',
+                )),
                 ('question_title', models.TextField()),
                 ('question_options', models.JSONField(default=list)),
                 ('answer', models.CharField(max_length=255)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('quiz', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='questions', to='quiz_app.quiz')),
+                ('quiz', models.ForeignKey(
+                    on_delete=django.db.models.deletion.CASCADE,
+                    related_name='questions',
+                    to='quiz_app.quiz',
+                )),
             ],
             options={
                 'ordering': ['id'],

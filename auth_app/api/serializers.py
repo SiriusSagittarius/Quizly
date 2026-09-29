@@ -20,7 +20,7 @@ class RegistrationSerializer(serializers.ModelSerializer):
         """Reject e-mail addresses that are already registered."""
         if User.objects.filter(email__iexact=value).exists():
             raise serializers.ValidationError(
-                'Diese E-Mail-Adresse wird bereits verwendet.'
+                'This email address is already in use.'
             )
         return value
 
@@ -33,7 +33,7 @@ class RegistrationSerializer(serializers.ModelSerializer):
         """Make sure both entered passwords are identical."""
         if attrs['password'] != attrs['confirmed_password']:
             raise serializers.ValidationError(
-                {'confirmed_password': 'Die Passwörter stimmen nicht überein.'}
+                {'confirmed_password': 'Passwords do not match.'}
             )
         return attrs
 
@@ -55,7 +55,7 @@ class LoginSerializer(serializers.Serializer):
             username=attrs['username'], password=attrs['password']
         )
         if user is None:
-            raise serializers.ValidationError('Ungültige Anmeldedaten.')
+            raise serializers.ValidationError('Invalid credentials.')
         attrs['user'] = user
         return attrs
 

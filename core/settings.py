@@ -78,7 +78,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-LANGUAGE_CODE = 'de-de'
+LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'
 
@@ -118,7 +118,7 @@ LOGGING = {
     'loggers': {'quiz_app': {'handlers': ['console'], 'level': 'INFO'}},
 }
 
-JWT_COOKIE_SECURE =os.getenv('JWT_COOKIE_SECURE', 'False') == 'True'
+JWT_COOKIE_SECURE = os.getenv('JWT_COOKIE_SECURE', 'False') == 'True'
 
 JWT_COOKIE_SAMESITE = 'Lax'
 

@@ -50,14 +50,14 @@ def delete_auth_cookies(response):
 def create_access_token(raw_refresh_token):
     """Return a new access token for a valid, not blacklisted refresh token."""
     if not raw_refresh_token:
-        raise TokenError('Refresh-Token fehlt.')
+        raise TokenError('Refresh token is missing.')
     return str(RefreshToken(raw_refresh_token).access_token)
 
 
 def blacklist_refresh_token(raw_refresh_token):
     """Put the refresh token on the blacklist or raise TokenError."""
     if not raw_refresh_token:
-        raise TokenError('Refresh-Token fehlt.')
+        raise TokenError('Refresh token is missing.')
     RefreshToken(raw_refresh_token).blacklist()
 
 

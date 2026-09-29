@@ -18,6 +18,6 @@ class PasswordComplexityValidator:
     def get_help_text(self):
         """Describe the rule for forms and error messages."""
         return (
-            'Das Passwort braucht mindestens einen Großbuchstaben, '
-            'einen Kleinbuchstaben und eine Ziffer.'
+            'The password needs at least one uppercase letter, '
+            'one lowercase letter and one digit.'
         )

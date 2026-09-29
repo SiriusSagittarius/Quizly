@@ -53,6 +53,6 @@ class Question(models.Model):
         """Require four distinct options that contain the answer."""
         if not is_valid_question(self.question_options, self.answer):
             raise ValidationError(
-                'Es werden genau 4 unterschiedliche Antwortmöglichkeiten '
-                'benötigt und die Antwort muss eine davon sein.'
+                'Exactly 4 different answer options are required '
+                'and the answer must be one of them.'
             )

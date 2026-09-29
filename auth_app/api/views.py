@@ -20,11 +20,11 @@ from auth_app.utils import (
     set_auth_cookies,
 )
 
-LOGIN_FAILED = {'detail': 'Ungültige Anmeldedaten.'}
+LOGIN_FAILED = {'detail': 'Invalid credentials.'}
 
 LOGOUT_MESSAGE = (
-    'Abmeldung erfolgreich! Alle Tokens werden gelöscht. '
-    'Das Aktualisierungstoken ist jetzt ungültig.'
+    'Log-Out successfully! All Tokens will be deleted. '
+    'Refresh token is now invalid.'
 )
 
 
@@ -40,7 +40,7 @@ class RegistrationView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(
-            {'detail': 'Benutzer erfolgreich erstellt!'},
+            {'detail': 'User created successfully!'},
             status=status.HTTP_201_CREATED,
         )
 
@@ -63,7 +63,7 @@ class LoginView(APIView):
         user = serializer.validated_data['user']
         user_data = UserSerializer(user).data
         response = Response(
-            {'detail': 'Erfolgreich angemeldet!', 'user': user_data}
+            {'detail': 'Login successfully!', 'user': user_data}
         )
         set_auth_cookies(response, user)
         return response
@@ -85,7 +85,7 @@ class LogoutView(APIView):
             blacklist_refresh_token(request.COOKIES.get(REFRESH_COOKIE_NAME))
         except TokenError:
             return Response(
-                {'detail': 'Nicht authentifiziert.'},
+                {'detail': 'Not authenticated.'},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
         blacklist_access_token(request.COOKIES.get(ACCESS_COOKIE_NAME))
@@ -112,9 +112,9 @@ class CookieTokenRefreshView(APIView):
             )
         except TokenError:
             return Response(
-                {'detail': 'Refresh-Token ungültig oder fehlt.'},
+                {'detail': 'Refresh token invalid or missing.'},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
-        response = Response({'detail': 'Token aktualisiert'})
+        response = Response({'detail': 'Token refreshed'})
         set_access_cookie(response, access_token)
         return response

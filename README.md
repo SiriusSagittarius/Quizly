@@ -120,8 +120,7 @@ with `404`.
   transcription and quiz generation, usually well under a minute.
 - **Video length:** the audio is stored with 64 kbit/s, so videos up to
   about 50 minutes stay below the 25 MB upload limit of the Groq free tier.
-- **Too little speech:** videos with fewer than 100 spoken words (music,
-  noise) are rejected with `400`.
+- **No speech:** videos without any spoken words are rejected with `400`.
 - **Groq free tier:** about 1,000 requests per day and 8,000 tokens per
   minute for each model. Transcripts are therefore cut after about
   16,000 characters (roughly 15 minutes of speech). For longer videos the

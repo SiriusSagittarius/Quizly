@@ -51,6 +51,6 @@ class QuizCreateSerializer(serializers.Serializer):
         watch_url = normalize_youtube_url(value)
         if watch_url is None:
             raise serializers.ValidationError(
-                'Bitte eine gültige YouTube-URL angeben.'
+                'Please enter a valid YouTube URL.'
             )
         return watch_url

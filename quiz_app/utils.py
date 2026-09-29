@@ -12,7 +12,7 @@ from django.conf import settings
 from django.db import transaction
 
 from quiz_app.api.exceptions import (
-    NotEnoughSpeechError,
+    NoSpeechError,
     QuizGenerationError,
     VideoUnavailableError,
 )
@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 
 QUESTION_COUNT = 10
 DOWNLOAD_ATTEMPTS = 2
-MIN_TRANSCRIPT_WORDS = 100
 MAX_TRANSCRIPT_CHARS = 16_000
 MAX_ANSWER_TOKENS = 3_000
 AI_TIMEOUT_SECONDS = 120
@@ -34,23 +33,27 @@ YOUTUBE_HOSTS = {
     'youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com',
 }
 PATH_ID_PREFIXES = {'shorts', 'embed', 'live'}
+AUDIO_POSTPROCESSOR = {
+    'key': 'FFmpegExtractAudio',
+    'preferredcodec': 'mp3',
+    'preferredquality': '64',
+}
 
-QUIZ_INSTRUCTIONS = """Du bist ein Quiz-Generator. Der Nutzer schickt dir
-das Transkript eines YouTube-Videos. Erstelle daraus ein Multiple-Choice-Quiz.
+QUIZ_INSTRUCTIONS = """You are a quiz generator. The user sends you the
+transcript of a YouTube video. Create a multiple choice quiz from it.
 
-Regeln:
-- Genau 10 Fragen, die sich nur auf Inhalte des Transkripts beziehen.
-- Frage nach Aussagen, Fakten und Zusammenhängen aus dem Video, nicht
-  nach dem Wortlaut des Transkripts (also keine Fragen wie „Welches Wort
-  kommt im Transkript vor?“).
-- Jede Frage hat genau 4 unterschiedliche Antwortmöglichkeiten.
-- Genau eine Antwortmöglichkeit ist richtig.
-- "answer" muss Zeichen für Zeichen einer der 4 Antwortmöglichkeiten
-  entsprechen.
-- "title" ist ein kurzer, treffender Quiz-Titel (höchstens 60 Zeichen).
-- "description" fasst das Thema in einem Satz zusammen
-  (höchstens 150 Zeichen).
-- Verwende die Sprache des Transkripts.
+Rules:
+- Exactly 10 questions that only refer to the content of the transcript.
+- Ask about statements, facts and connections from the video, not about
+  the wording of the transcript (no questions like "Which word appears in
+  the transcript?").
+- Every question has exactly 4 different answer options.
+- Exactly one answer option is correct.
+- "answer" must match one of the 4 answer options character by character.
+- "title" is a short, fitting quiz title (at most 60 characters).
+- "description" summarizes the topic in one sentence (at most 150
+  characters).
+- Write the quiz in the same language as the transcript.
 """
 
 QUESTION_SCHEMA = {
@@ -130,8 +133,7 @@ def find_video_id_candidate(parsed_url):
 def build_download_options(target_dir):
     """Return yt-dlp options that keep only the audio track as mp3.
 
-    A bitrate of 64 kbit/s is enough for speech and keeps videos of about
-    50 minutes below the 25 MB upload limit of the Groq free tier.
+    64 kbit/s keeps about 50 minutes below Groq's 25 MB upload limit.
     """
     return {
         'format': 'bestaudio/best',
@@ -139,11 +141,7 @@ def build_download_options(target_dir):
         'noplaylist': True,
         'quiet': True,
         'noprogress': True,
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '64',
-        }],
+        'postprocessors': [AUDIO_POSTPROCESSOR],
     }
 
 
@@ -192,14 +190,14 @@ def transcribe_audio(audio_path):
 
 
 def prepare_transcript(transcript):
-    """Reject videos with too little speech and shorten long transcripts.
+    """Reject videos without speech and shorten long transcripts.
 
     The Groq free tier allows 8,000 tokens per minute, so the transcript
     is cut after about 16,000 characters (roughly 15 minutes of speech).
     """
     words = transcript.split()
-    if len(words) < MIN_TRANSCRIPT_WORDS:
-        raise NotEnoughSpeechError()
+    if not words:
+        raise NoSpeechError()
     return ' '.join(words)[:MAX_TRANSCRIPT_CHARS]
 
 

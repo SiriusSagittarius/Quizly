@@ -7,19 +7,17 @@ class VideoUnavailableError(APIException):
 
     status_code = status.HTTP_400_BAD_REQUEST
     default_detail = (
-        'Das Video konnte nicht geladen werden. Bitte die URL prüfen.'
+        'The video could not be loaded. Please check the URL.'
     )
     default_code = 'video_unavailable'
 
 
-class NotEnoughSpeechError(APIException):
-    """The video contains too little spoken content for a quiz."""
+class NoSpeechError(APIException):
+    """The video contains no spoken content to build a quiz from."""
 
     status_code = status.HTTP_400_BAD_REQUEST
-    default_detail = (
-        'Das Video enthält zu wenig gesprochenen Inhalt für ein Quiz.'
-    )
-    default_code = 'not_enough_speech'
+    default_detail = 'No spoken words were detected in the video.'
+    default_code = 'no_speech'
 
 
 class QuizGenerationError(APIException):
@@ -27,6 +25,6 @@ class QuizGenerationError(APIException):
 
     status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     default_detail = (
-        'Das Quiz konnte nicht erstellt werden. Bitte später erneut versuchen.'
+        'The quiz could not be created. Please try again later.'
     )
     default_code = 'quiz_generation_failed'
