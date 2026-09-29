@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 import tempfile
@@ -13,19 +14,78 @@ from quiz_app.api.exceptions import (
     QuizGenerationError,
     VideoUnavailableError,
 )
+from quiz_app.validators import is_valid_question
 
 logger = logging.getLogger(__name__)
 
+QUESTION_COUNT = 10
 DOWNLOAD_ATTEMPTS = 2
 MIN_TRANSCRIPT_WORDS = 100
 MAX_TRANSCRIPT_CHARS = 16_000
+MAX_ANSWER_TOKENS = 3_000
 AI_TIMEOUT_SECONDS = 120
+AI_ERRORS = (groq.APIError, ValueError, TypeError)
 VIDEO_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{11}$')
 SHORT_LINK_HOSTS = {'youtu.be', 'www.youtu.be'}
 YOUTUBE_HOSTS = {
     'youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com',
 }
 PATH_ID_PREFIXES = {'shorts', 'embed', 'live'}
+
+QUIZ_INSTRUCTIONS = """Du bist ein Quiz-Generator. Der Nutzer schickt dir
+das Transkript eines YouTube-Videos. Erstelle daraus ein Multiple-Choice-Quiz.
+
+Regeln:
+- Genau 10 Fragen, die sich nur auf Inhalte des Transkripts beziehen.
+- Frage nach Aussagen, Fakten und Zusammenhängen aus dem Video, nicht
+  nach dem Wortlaut des Transkripts (also keine Fragen wie „Welches Wort
+  kommt im Transkript vor?“).
+- Jede Frage hat genau 4 unterschiedliche Antwortmöglichkeiten.
+- Genau eine Antwortmöglichkeit ist richtig.
+- "answer" muss Zeichen für Zeichen einer der 4 Antwortmöglichkeiten
+  entsprechen.
+- "title" ist ein kurzer, treffender Quiz-Titel (höchstens 60 Zeichen).
+- "description" fasst das Thema in einem Satz zusammen
+  (höchstens 150 Zeichen).
+- Verwende die Sprache des Transkripts.
+"""
+
+QUESTION_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'question_title': {'type': 'string'},
+        'question_options': {
+            'type': 'array',
+            'items': {'type': 'string'},
+            'minItems': 4,
+            'maxItems': 4,
+        },
+        'answer': {'type': 'string'},
+    },
+    'required': ['question_title', 'question_options', 'answer'],
+    'additionalProperties': False,
+}
+
+QUIZ_SCHEMA = {
+    'type': 'object',
+    'properties': {
+        'title': {'type': 'string'},
+        'description': {'type': 'string'},
+        'questions': {
+            'type': 'array',
+            'items': QUESTION_SCHEMA,
+            'minItems': QUESTION_COUNT,
+            'maxItems': QUESTION_COUNT,
+        },
+    },
+    'required': ['title', 'description', 'questions'],
+    'additionalProperties': False,
+}
+
+QUIZ_RESPONSE_FORMAT = {
+    'type': 'json_schema',
+    'json_schema': {'name': 'quiz', 'strict': True, 'schema': QUIZ_SCHEMA},
+}
 
 
 def normalize_youtube_url(url):
@@ -138,3 +198,64 @@ def prepare_transcript(transcript):
     if len(words) < MIN_TRANSCRIPT_WORDS:
         raise NotEnoughSpeechError()
     return ' '.join(words)[:MAX_TRANSCRIPT_CHARS]
+
+
+def request_quiz_from_ai(model_name, transcript):
+    """Send the transcript to a Groq model and demand a JSON quiz."""
+    with create_ai_client() as client:
+        return client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {'role': 'system', 'content': QUIZ_INSTRUCTIONS},
+                {'role': 'user', 'content': transcript},
+            ],
+            response_format=QUIZ_RESPONSE_FORMAT,
+            reasoning_effort='low',
+            max_completion_tokens=MAX_ANSWER_TOKENS,
+        )
+
+
+def request_valid_quiz(model_name, transcript):
+    """Return the quiz of one model or raise if it is missing or invalid."""
+    completion = request_quiz_from_ai(model_name, transcript)
+    quiz_data = json.loads(completion.choices[0].message.content)
+    validate_quiz_data(quiz_data)
+    return quiz_data
+
+
+def generate_quiz_data(transcript):
+    """Ask the configured AI models in order until one returns a quiz.
+
+    A model that is unavailable, out of quota or answers with an invalid
+    quiz is skipped.
+    """
+    last_error = None
+    for model_name in settings.AI_MODELS:
+        try:
+            return request_valid_quiz(model_name, transcript)
+        except (*AI_ERRORS, QuizGenerationError) as error:
+            logger.warning('AI model %s failed: %s', model_name, error)
+            last_error = error
+    raise QuizGenerationError() from last_error
+
+
+def is_valid_ai_question(question):
+    """Check a single question dictionary returned by the AI."""
+    return (
+        isinstance(question, dict)
+        and isinstance(question.get('question_title'), str)
+        and is_valid_question(
+            question.get('question_options'), question.get('answer')
+        )
+    )
+
+
+def validate_quiz_data(quiz_data):
+    """Raise QuizGenerationError unless the AI answer is a complete quiz."""
+    if not isinstance(quiz_data, dict) or not quiz_data.get('title'):
+        raise QuizGenerationError()
+    questions = quiz_data.get('questions')
+    if not isinstance(questions, list) or len(questions) != QUESTION_COUNT:
+        raise QuizGenerationError()
+    if not all(is_valid_ai_question(question) for question in questions):
+        raise QuizGenerationError()
