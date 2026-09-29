@@ -13,6 +13,14 @@ class QuestionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class QuestionWithTimestampsSerializer(QuestionSerializer):
+    """Question data including timestamps, returned after creation."""
+
+    class Meta(QuestionSerializer.Meta):
+        fields = QuestionSerializer.Meta.fields + ['created_at', 'updated_at']
+        read_only_fields = fields
+
+
 class QuizSerializer(serializers.ModelSerializer):
     """Quiz with its questions; only title and description are editable."""
 
@@ -25,6 +33,12 @@ class QuizSerializer(serializers.ModelSerializer):
             'video_url', 'questions',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'video_url']
+
+
+class QuizCreatedSerializer(QuizSerializer):
+    """Response for a freshly generated quiz."""
+
+    questions = QuestionWithTimestampsSerializer(many=True, read_only=True)
 
 
 class QuizCreateSerializer(serializers.Serializer):

@@ -1,5 +1,6 @@
 import json
 import logging
+import random
 import re
 import tempfile
 from pathlib import Path
@@ -8,12 +9,14 @@ from urllib.parse import parse_qs, urlparse
 import groq
 import yt_dlp
 from django.conf import settings
+from django.db import transaction
 
 from quiz_app.api.exceptions import (
     NotEnoughSpeechError,
     QuizGenerationError,
     VideoUnavailableError,
 )
+from quiz_app.models import Question, Quiz
 from quiz_app.validators import is_valid_question
 
 logger = logging.getLogger(__name__)
@@ -259,3 +262,36 @@ def validate_quiz_data(quiz_data):
         raise QuizGenerationError()
     if not all(is_valid_ai_question(question) for question in questions):
         raise QuizGenerationError()
+
+
+def build_question(quiz, question_data):
+    """Create an unsaved question with the options in random order."""
+    options = question_data['question_options']
+    return Question(
+        quiz=quiz,
+        question_title=question_data['question_title'],
+        question_options=random.sample(options, len(options)),
+        answer=question_data['answer'],
+    )
+
+
+@transaction.atomic
+def save_quiz(quiz_data, video_url, owner):
+    """Store the quiz and all questions in one database transaction."""
+    quiz = Quiz.objects.create(
+        owner=owner,
+        title=str(quiz_data['title'])[:255],
+        description=str(quiz_data.get('description', '')),
+        video_url=video_url,
+    )
+    Question.objects.bulk_create(
+        build_question(quiz, question) for question in quiz_data['questions']
+    )
+    return quiz
+
+
+def create_quiz_from_video(video_url, owner):
+    """Turn a YouTube video into a saved quiz with ten questions."""
+    transcript = transcribe_video(video_url)
+    quiz_data = generate_quiz_data(prepare_transcript(transcript))
+    return save_quiz(quiz_data, video_url, owner)
