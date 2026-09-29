@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from quiz_app.forms import QuestionAdminForm
 from quiz_app.models import Question, Quiz
 
 
@@ -7,6 +8,7 @@ class QuestionInline(admin.StackedInline):
     """Edit all questions directly on the quiz page."""
 
     model = Question
+    form = QuestionAdminForm
     extra = 0
     fields = ('question_title', 'question_options', 'answer')
 
@@ -26,6 +28,7 @@ class QuizAdmin(admin.ModelAdmin):
 class QuestionAdmin(admin.ModelAdmin):
     """Admin view to edit single questions."""
 
+    form = QuestionAdminForm
     list_display = ('question_title', 'quiz', 'answer')
     list_filter = ('quiz',)
     search_fields = ('question_title', 'quiz__title')

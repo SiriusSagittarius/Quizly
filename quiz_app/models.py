@@ -1,8 +1,5 @@
 from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.db import models
-
-from quiz_app.validators import is_valid_question
 
 
 class Quiz(models.Model):
@@ -48,11 +45,3 @@ class Question(models.Model):
     def __str__(self):
         """Show the question text in the admin panel."""
         return self.question_title
-
-    def clean(self):
-        """Require four distinct options that contain the answer."""
-        if not is_valid_question(self.question_options, self.answer):
-            raise ValidationError(
-                'Exactly 4 different answer options are required '
-                'and the answer must be one of them.'
-            )

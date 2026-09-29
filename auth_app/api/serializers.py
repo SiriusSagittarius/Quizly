@@ -1,4 +1,4 @@
-from django.contrib.auth import authenticate, password_validation
+from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
@@ -22,11 +22,6 @@ class RegistrationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'This email address is already in use.'
             )
-        return value
-
-    def validate_password(self, value):
-        """Run the password validators configured in the settings."""
-        password_validation.validate_password(value)
         return value
 
     def validate(self, attrs):

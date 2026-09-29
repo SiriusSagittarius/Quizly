@@ -16,6 +16,7 @@ class QuizListCreateView(generics.ListCreateAPIView):
     """List the user's quizzes or generate a new one from a YouTube URL."""
 
     serializer_class = QuizSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         """Return only the quizzes of the logged in user."""
