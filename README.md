@@ -2,8 +2,8 @@
 
 Django REST API for **Quizly**, an app that turns a YouTube video into a
 multiple-choice quiz. The backend downloads the audio track of the video,
-transcribes it with **Whisper AI** and lets `gpt-oss-120b` write a quiz with
-10 questions and 4 answer options each. Both AI models run on **Groq**.
+transcribes it locally with **Whisper AI** and lets `gpt-oss-120b` on
+**Groq** write a quiz with 10 questions and 4 answer options each.
 
 The frontend is provided separately and talks to this API via REST.
 Authentication uses **JWT tokens in HttpOnly cookies**.
@@ -25,13 +25,13 @@ Authentication uses **JWT tokens in HttpOnly cookies**.
 | CORS | django-cors-headers |
 | YouTube download | yt-dlp |
 | Audio conversion | FFmpeg |
-| Transcription | Whisper AI (`whisper-large-v3-turbo`) via Groq API |
+| Transcription | Whisper AI (`openai-whisper`, runs locally) |
 | Quiz generation | Groq API with `gpt-oss-120b` / `gpt-oss-20b` (`groq`) |
 
 ## Requirements
 
 - **Python 3.12 or newer** (tested with 3.14)
-- **FFmpeg, installed globally** – converts the audio for Whisper AI.
+- **FFmpeg, installed globally** – required by Whisper AI and yt-dlp.
   The command `ffmpeg -version` must work in a new terminal.
   - Windows: `winget install Gyan.FFmpeg`
   - macOS: `brew install ffmpeg`
@@ -112,14 +112,16 @@ with `404`.
 | `JWT_COOKIE_SECURE` | `True` if the site runs on HTTPS |
 | `GROQ_API_KEY` | Your Groq API key |
 | `AI_MODELS` | Groq models, tried in this order |
-| `TRANSCRIPTION_MODEL` | Whisper model on Groq |
+| `WHISPER_MODEL` | Whisper model size (`tiny`, `base`, `small`, ...) |
 
 ## Good to know
 
-- **Creating a quiz takes a moment.** The request waits for download,
-  transcription and quiz generation, usually well under a minute.
-- **Video length:** the audio is stored with 64 kbit/s, so videos up to
-  about 50 minutes stay below the 25 MB upload limit of the Groq free tier.
+- **Creating a quiz takes time.** The request waits for download,
+  transcription and quiz generation. On a normal CPU a 5-minute video
+  needs roughly one minute.
+- **First quiz:** Whisper downloads its model once (about 140 MB for `base`).
+- **One at a time:** transcriptions run one after another. A second quiz
+  request waits until the first transcription is finished.
 - **No speech:** videos without any spoken words are rejected with `400`.
 - **Groq free tier:** about 1,000 requests per day and 8,000 tokens per
   minute for each model. Transcripts are therefore cut after about

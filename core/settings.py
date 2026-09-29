@@ -132,9 +132,7 @@ JWT_COOKIE_SAMESITE = 'Lax'
 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
-TRANSCRIPTION_MODEL = os.getenv(
-    'TRANSCRIPTION_MODEL', 'whisper-large-v3-turbo'
-)
+WHISPER_MODEL = os.getenv('WHISPER_MODEL', 'base')
 
 AI_MODELS = os.getenv(
     'AI_MODELS', 'openai/gpt-oss-120b,openai/gpt-oss-20b'

@@ -3,10 +3,13 @@ import logging
 import random
 import re
 import tempfile
+import threading
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import groq
+import whisper
 import yt_dlp
 from django.conf import settings
 from django.db import transaction
@@ -33,11 +36,7 @@ YOUTUBE_HOSTS = {
     'youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com',
 }
 PATH_ID_PREFIXES = {'shorts', 'embed', 'live'}
-AUDIO_POSTPROCESSOR = {
-    'key': 'FFmpegExtractAudio',
-    'preferredcodec': 'mp3',
-    'preferredquality': '64',
-}
+WHISPER_LOCK = threading.Lock()
 
 QUIZ_INSTRUCTIONS = """You are a quiz generator. The user sends you the
 transcript of a YouTube video. Create a multiple choice quiz from it.
@@ -131,17 +130,16 @@ def find_video_id_candidate(parsed_url):
 
 
 def build_download_options(target_dir):
-    """Return yt-dlp options that keep only the audio track as mp3.
-
-    64 kbit/s keeps about 50 minutes below Groq's 25 MB upload limit.
-    """
+    """Return yt-dlp options that keep only the audio track as mp3."""
     return {
         'format': 'bestaudio/best',
         'outtmpl': str(Path(target_dir) / '%(id)s.%(ext)s'),
         'noplaylist': True,
         'quiet': True,
         'noprogress': True,
-        'postprocessors': [AUDIO_POSTPROCESSOR],
+        'postprocessors': [
+            {'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'},
+        ],
     }
 
 
@@ -176,17 +174,26 @@ def create_ai_client():
     return groq.Groq(api_key=settings.GROQ_API_KEY, timeout=AI_TIMEOUT_SECONDS)
 
 
+@lru_cache(maxsize=1)
+def load_whisper_model():
+    """Load the configured Whisper model once and keep it in memory."""
+    return whisper.load_model(settings.WHISPER_MODEL)
+
+
 def transcribe_audio(audio_path):
-    """Transcribe the audio file with Whisper AI hosted on Groq."""
+    """Transcribe the audio file locally with Whisper AI.
+
+    The lock allows only one transcription at a time to avoid crashes.
+    """
     try:
-        with create_ai_client() as client:
-            transcription = client.audio.transcriptions.create(
-                model=settings.TRANSCRIPTION_MODEL, file=audio_path
+        with WHISPER_LOCK:
+            result = load_whisper_model().transcribe(
+                str(audio_path), fp16=False
             )
-    except groq.APIError as error:
+    except RuntimeError as error:
         logger.error('Transcription failed: %s', error)
         raise QuizGenerationError() from error
-    return transcription.text
+    return result['text']
 
 
 def prepare_transcript(transcript):

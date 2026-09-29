@@ -4,4 +4,5 @@ djangorestframework-simplejwt==5.5.1
 django-cors-headers==4.9.0
 python-dotenv==1.2.3
 yt-dlp[default]==2026.8.19
+openai-whisper==20250625
 groq==1.7.0
