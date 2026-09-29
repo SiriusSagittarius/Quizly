@@ -121,3 +121,5 @@ LOGGING = {
 JWT_COOKIE_SECURE =os.getenv('JWT_COOKIE_SECURE', 'False') == 'True'
 
 JWT_COOKIE_SAMESITE = 'Lax'
+
+WHISPER_MODEL = os.getenv('WHISPER_MODEL', 'base')

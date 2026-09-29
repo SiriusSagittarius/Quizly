@@ -1,15 +1,25 @@
 import logging
 import re
+import tempfile
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import whisper
 import yt_dlp
+from django.conf import settings
 
-from quiz_app.api.exceptions import VideoUnavailableError
+from quiz_app.api.exceptions import (
+    NotEnoughSpeechError,
+    QuizGenerationError,
+    VideoUnavailableError,
+)
 
 logger = logging.getLogger(__name__)
 
 DOWNLOAD_ATTEMPTS = 2
+MIN_TRANSCRIPT_WORDS = 100
+MAX_TRANSCRIPT_CHARS = 16_000
 VIDEO_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{11}$')
 SHORT_LINK_HOSTS = {'youtu.be', 'www.youtu.be'}
 YOUTUBE_HOSTS = {
@@ -85,3 +95,38 @@ def download_audio(video_url, target_dir):
             logger.warning('Download attempt %s failed: %s', attempt, error)
             last_error = error
     raise VideoUnavailableError() from last_error
+
+
+def transcribe_video(video_url):
+    """Download the audio into a temporary folder and transcribe it."""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp_dir:
+        audio_path = download_audio(video_url, temp_dir)
+        return transcribe_audio(audio_path)
+
+
+@lru_cache(maxsize=1)
+def load_whisper_model():
+    """Load the configured Whisper model once and keep it in memory."""
+    return whisper.load_model(settings.WHISPER_MODEL)
+
+
+def transcribe_audio(audio_path):
+    """Transcribe the audio file locally with Whisper AI."""
+    try:
+        result = load_whisper_model().transcribe(str(audio_path), fp16=False)
+    except RuntimeError as error:
+        logger.error('Transcription failed: %s', error)
+        raise QuizGenerationError() from error
+    return result['text']
+
+
+def prepare_transcript(transcript):
+    """Reject videos with too little speech and shorten long transcripts.
+
+    The Groq free tier allows 8,000 tokens per minute, so the transcript
+    is cut after about 16,000 characters (roughly 15 minutes of speech).
+    """
+    words = transcript.split()
+    if len(words) < MIN_TRANSCRIPT_WORDS:
+        raise NotEnoughSpeechError()
+    return ' '.join(words)[:MAX_TRANSCRIPT_CHARS]
