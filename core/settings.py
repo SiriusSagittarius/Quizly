@@ -122,4 +122,8 @@ JWT_COOKIE_SECURE =os.getenv('JWT_COOKIE_SECURE', 'False') == 'True'
 
 JWT_COOKIE_SAMESITE = 'Lax'
 
-WHISPER_MODEL = os.getenv('WHISPER_MODEL', 'base')
+GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+
+TRANSCRIPTION_MODEL = os.getenv(
+    'TRANSCRIPTION_MODEL', 'whisper-large-v3-turbo'
+)
